@@ -4,7 +4,7 @@ import numpy as np
 def segment_leaf(image_path):
     """
     Segments a leaf from the background.
-    
+
     Args:
         image_path (str): Path to the input image.
 
@@ -34,7 +34,7 @@ def segment_leaf(image_path):
     # Median blur to reduce noise
     blurred = cv2.medianBlur(closed, 5)
 
-    # Find contours (optional, if you want to extract each leaf)
+    # Find contours
     contours, _ = cv2.findContours(blurred, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     mask = np.zeros_like(gray)
     cv2.drawContours(mask, contours, -1, 255, thickness=cv2.FILLED)

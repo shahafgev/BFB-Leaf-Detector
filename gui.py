@@ -14,8 +14,32 @@ from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 
 # Set QT plugin path dynamically
 import PyQt5
+
 plugin_path = os.path.join(os.path.dirname(PyQt5.__file__), "Qt", "plugins", "platforms")
 os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = plugin_path
+
+
+def apply_clahe_only_on_leaf(image, mask, clip_limit=1.0, grid_size=(1, 1)):
+    b, g, r = cv2.split(image)
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=grid_size)
+
+    # Apply CLAHE to the full channel
+    b_enh_full = clahe.apply(b)
+    g_enh_full = clahe.apply(g)
+    r_enh_full = clahe.apply(r)
+
+    # Create empty channels and copy only the leaf pixels
+    b_enh = np.zeros_like(b)
+    g_enh = np.zeros_like(g)
+    r_enh = np.zeros_like(r)
+
+    b_enh[mask == 1] = b_enh_full[mask == 1]
+    g_enh[mask == 1] = g_enh_full[mask == 1]
+    r_enh[mask == 1] = r_enh_full[mask == 1]
+
+    return cv2.merge([b_enh, g_enh, r_enh])
+
+
 
 
 class LeafDiseaseGUI(QWidget):
@@ -31,28 +55,23 @@ class LeafDiseaseGUI(QWidget):
         self.load_sam()
 
     def init_ui(self):
-        # Labels
         self.original_label = QLabel("Original Image")
         self.result_label = QLabel("Result Overlay")
         self.result_label.setFrameStyle(QFrame.Box)
 
-        # Buttons
         upload_btn = QPushButton("Upload Leaf Image")
         upload_btn.clicked.connect(self.load_image)
 
         classify_btn = QPushButton("Run Classification")
         classify_btn.clicked.connect(self.run_classification)
 
-        # Slider
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setMinimum(0)
         self.slider.setMaximum(20)
         self.slider.setValue(0)
         self.slider.valueChanged.connect(self.update_slider_label)
-
         self.slider_label = QLabel("Border Thickness: 0 px")
 
-        # Layouts
         h_img_layout = QHBoxLayout()
         h_img_layout.addWidget(self.original_label)
         h_img_layout.addWidget(self.result_label)
@@ -82,7 +101,6 @@ class LeafDiseaseGUI(QWidget):
             self.original_label.setPixmap(pixmap)
 
     def load_sam(self):
-        # Load SAM model once when GUI starts
         checkpoint = "checkpoints/sam_vit_b.pth"
         sam = sam_model_registry["vit_b"](checkpoint=checkpoint)
         sam.to(device="cpu")
@@ -102,17 +120,30 @@ class LeafDiseaseGUI(QWidget):
         masks = sorted(masks, key=lambda m: m['area'], reverse=True)
         best_mask = masks[0]['segmentation'].astype(np.uint8)
         mask_resized = cv2.resize(best_mask, (image_orig.shape[1], image_orig.shape[0]), interpolation=cv2.INTER_NEAREST)
-        return mask_resized
+        inverted_mask = np.where(mask_resized == 1, 0, 1).astype(np.uint8)
+        return inverted_mask
 
     def run_classification(self):
         if not self.image_path:
             return
 
         try:
+            original_img = cv2.imread(self.image_path)
+            original_rgb = cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB)
             mask = self.generate_mask(self.image_path)
-            overlay_img, percent = classify_leaf(self.image_path, mask=mask, border_thickness=self.border_thickness)
 
-            # Convert to QPixmap for display
+            # Apply CLAHE only on leaf pixels
+            clahe_img = apply_clahe_only_on_leaf(original_img, mask)
+            cv2.imwrite("debug_clahe_input.jpg", clahe_img)
+
+            # Run classification with processed CLAHE image and mask
+            overlay_img, percent = classify_leaf(
+                self.image_path,
+                mask=mask,
+                border_thickness=self.border_thickness,
+                processed_img=clahe_img
+            )
+
             rgb_image = cv2.cvtColor(overlay_img, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb_image.shape
             bytes_per_line = ch * w

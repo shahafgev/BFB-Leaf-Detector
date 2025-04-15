@@ -166,7 +166,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - Meta AI for the Segment Anything Model (SAM)
-- Roni Burdam and Yael Sznaidman, my project partners at Ben Gurion University's Image Processing and Analysis course
+- Roni Burdam and Yael Sznaidman, my project partners at Ben-Gurion University of the Negev's Image Processing and Analysis course
 - This project originated as a course assignment and was later extended with:
   - Integration of the SAM model for improved segmentation
   - Enhanced GUI with interactive features

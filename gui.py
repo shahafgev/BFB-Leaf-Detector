@@ -743,7 +743,6 @@ class LeafDiseaseGUI(QWidget):
                                                       interpolation=cv2.INTER_NEAREST)
                     
                     self.current_clahe_img = apply_clahe_only_on_leaf(self.current_original_img, self.current_mask)
-                    cv2.imwrite("debug_clahe_input.jpg", self.current_clahe_img)
 
                     # Display CLAHE result
                     clahe_rgb = cv2.cvtColor(self.current_clahe_img, cv2.COLOR_BGR2RGB)
@@ -922,66 +921,6 @@ class LeafDiseaseGUI(QWidget):
                 }
             """)
             msg.exec_()
-
-    def find_leaf_bounding_box(self, mask):
-        """Find the bounding box of the leaf in the mask"""
-        # Find the coordinates of the leaf pixels
-        y_indices, x_indices = np.where(mask == 1)
-        
-        if len(y_indices) == 0 or len(x_indices) == 0:
-            # If no leaf pixels found, return the full image bounds
-            return (0, 0, mask.shape[1], mask.shape[0])
-        
-        # Get the bounding box coordinates
-        min_y, max_y = np.min(y_indices), np.max(y_indices)
-        min_x, max_x = np.min(x_indices), np.max(x_indices)
-        
-        # Add padding around the leaf (10% of the width/height)
-        height, width = mask.shape
-        pad_y = int(0.1 * (max_y - min_y))
-        pad_x = int(0.1 * (max_x - min_x))
-        
-        # Ensure the padding doesn't exceed image boundaries
-        min_y = max(0, min_y - pad_y)
-        max_y = min(height, max_y + pad_y)
-        min_x = max(0, min_x - pad_x)
-        max_x = min(width, max_x + pad_x)
-        
-        return (min_x, min_y, max_x, max_y)
-        
-    def focus_on_leaf(self, pixmap, bbox):
-        """Adjust the pixmap to focus on the leaf"""
-        # Get the original image dimensions
-        img_width = pixmap.width()
-        img_height = pixmap.height()
-        
-        # Get the bounding box coordinates
-        min_x, min_y, max_x, max_y = bbox
-        
-        # Calculate the center of the leaf
-        leaf_center_x = (min_x + max_x) / 2
-        leaf_center_y = (min_y + max_y) / 2
-        
-        # Calculate the center of the image
-        img_center_x = img_width / 2
-        img_center_y = img_height / 2
-        
-        # Calculate the offset to center the leaf
-        offset_x = leaf_center_x - img_center_x
-        offset_y = leaf_center_y - img_center_y
-        
-        # Create a new pixmap with the same size
-        focused_pixmap = QPixmap(pixmap.size())
-        focused_pixmap.fill(Qt.transparent)
-        
-        # Create a painter to draw the pixmap
-        painter = QPainter(focused_pixmap)
-        
-        # Draw the original pixmap with the offset
-        painter.drawPixmap(offset_x, offset_y, pixmap)
-        painter.end()
-        
-        return focused_pixmap
 
     def reset_analysis(self):
         """Reset the analysis to default settings"""

@@ -1,8 +1,6 @@
 import pandas as pd
 import joblib
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.utils.class_weight import compute_class_weight
 from src.modeling.train import get_model_grid
@@ -14,30 +12,9 @@ df = pd.read_csv("processed_data/pixel_dataset_rgbhsv.csv")
 X = df[["B", "G", "R", "H", "S", "V"]]
 y = df["label"]
 
-# Perform Exploratory Data Analysis
-print("\n=== EXPLORATORY DATA ANALYSIS ===")
-print(f"Dataset shape: {df.shape}")
-
-# Analyze class distribution
-class_counts = df['label'].value_counts()
-print("\nClass distribution:")
-print(class_counts)
-
-# Calculate class percentages
-class_percentages = (class_counts / len(df)) * 100
-print("\nClass percentages:")
-print(class_percentages)
-
-# Check for class imbalance
-imbalance_ratio = class_counts.max() / class_counts.min()
-print(f"\nImbalance ratio (majority/minority): {imbalance_ratio:.2f}")
-
 # Calculate class weights for balanced training
 class_weights = compute_class_weight('balanced', classes=df['label'].unique(), y=df['label'])
 class_weight_dict = dict(zip(df['label'].unique(), class_weights))
-print("\nRecommended class weights for balanced training:")
-for label, weight in class_weight_dict.items():
-    print(f"{label}: {weight:.4f}")
 
 # Split data
 print("\nSplitting data into train and test sets...")
@@ -57,7 +34,7 @@ best_name = ""
 
 for name, item in model_grid.items():
     print(f"\n🔍 Tuning {name}...")
-    grid = GridSearchCV(item["model"], item["params"], cv=5, scoring="accuracy", n_jobs=-1)
+    grid = GridSearchCV(item["model"], item["params"], cv=5, scoring="accuracy", n_jobs=1)
     grid.fit(X_train, y_train)
 
     print(f"Best parameters for {name}: {grid.best_params_}")

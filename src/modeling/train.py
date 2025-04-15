@@ -5,7 +5,7 @@ from sklearn.svm import SVC
 def get_model_grid():
     return {
         "Logistic Regression": {
-            "model": LogisticRegression(max_iter=1000),
+            "model": LogisticRegression(max_iter=2000),
             "params": {
                 "C": [0.001, 0.01, 0.1, 1, 10, 100],
                 "penalty": ['l1', 'l2'],

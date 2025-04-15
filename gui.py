@@ -1087,6 +1087,40 @@ class LeafDiseaseGUI(QWidget):
         # Update the disease percentage
         self.percentage_label.setText(f"Disease Percentage: {percent:.2f}%")
 
+    def apply_clahe(self, image_path):
+        """Apply CLAHE to the image and save the result."""
+        try:
+            # Read the image
+            img = cv2.imread(image_path)
+            if img is None:
+                raise ValueError("Failed to read image")
+
+            # Convert to LAB color space
+            lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+            l, a, b = cv2.split(lab)
+
+            # Apply CLAHE to L channel
+            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+            cl = clahe.apply(l)
+
+            # Merge channels
+            limg = cv2.merge((cl, a, b))
+
+            # Convert back to BGR
+            enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+
+            # Save the enhanced image
+            filename = os.path.basename(image_path)
+            output_path = os.path.join("data/processed/clahe", filename)
+            os.makedirs("data/processed/clahe", exist_ok=True)
+            cv2.imwrite(output_path, enhanced)
+
+            return enhanced
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to apply CLAHE: {str(e)}")
+            return None
+
 class EditWindow(QWidget):
     """A separate window for editing the result image"""
     result_updated = pyqtSignal(np.ndarray, float)  # Signal to send edited image and percentage back to main window

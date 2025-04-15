@@ -46,7 +46,7 @@ def balance_dataset(X, y):
 
 # Load data
 print("Loading dataset...")
-df = pd.read_csv("processed_data/pixel_dataset_rgbhsv.csv")
+df = pd.read_csv("data/processed/pixel_dataset_rgbhsv.csv")
 X = df[["B", "G", "R", "H", "S", "V"]]
 y = df["label"]
 

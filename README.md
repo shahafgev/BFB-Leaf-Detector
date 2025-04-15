@@ -90,17 +90,20 @@ The GUI allows you to:
 
 ```
 BFB-Leaf-Detector/
-├── checkpoints/           # Model checkpoints (SAM)
-├── models/                # Trained classification models
-├── outputs/               # Evaluation results and visualizations
-├── processed_data/        # Processed datasets
-├── src/
-│   ├── data/              # Data processing utilities
-│   ├── modeling/          # Model training and evaluation
-│   └── visualization/     # Visualization utilities
-├── gui.py                 # Graphical user interface
-├── train.py               # Model training script
-└── requirements.txt       # Project dependencies
+├── data/                  # All data files
+│   ├── raw/              # Original leaf images
+│   └── processed/        # Processed data
+│       ├── clahe/       # CLAHE processed images
+│       └── pixel_dataset_rgbhsv.csv
+├── checkpoints/          # Model checkpoints (SAM)
+├── models/              # Trained classification models
+├── outputs/             # Evaluation results and visualizations
+├── src/                 # Source code
+│   ├── modeling/        # Model training and evaluation
+│   └── preprocessing/   # Image preprocessing utilities
+├── gui.py              # Graphical user interface
+├── train.py            # Model training script
+└── requirements.txt    # Project dependencies
 ```
 
 ## Data

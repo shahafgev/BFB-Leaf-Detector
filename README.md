@@ -108,7 +108,7 @@ BFB-Leaf-Detector/
 
 ## Data
 
-The system uses a dataset of banana leaf images with the following features:
+The system uses a dataset of 36 melon leaf images with the following features:
 - RGB color channels
 - HSV color space conversion
 - Balanced training data to handle class imbalance

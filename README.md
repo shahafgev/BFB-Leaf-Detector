@@ -1,10 +1,10 @@
 # BFB Leaf Detector
 
-A machine learning-based system for detecting and classifying Banana Fusarium Wilt (BFB) in banana leaves using computer vision and machine learning techniques.
+A machine learning-based system for detecting and detecting Bacterial fruit blotch (BFB) in melon leaves using computer vision and machine learning techniques.
 
 ## Overview
 
-This project provides a comprehensive solution for detecting and classifying Banana Fusarium Wilt (BFB) in banana leaves. It combines computer vision techniques with machine learning models to analyze leaf images and identify signs of the disease. The system includes both a graphical user interface for easy interaction and a robust backend for image processing and classification.
+This project provides a comprehensive solution for detecting and classifying pixels with Bacterial fruit blotch (BFB) in melon leaves. It combines computer vision techniques with machine learning models to analyze leaf images and identify signs of the disease. The system includes both a graphical user interface for easy interaction and a robust backend for image processing and pixel classification.
 
 ## Features
 

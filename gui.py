@@ -9,8 +9,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QFileDialog, QSlider, QFrame,
     QMessageBox, QGridLayout
 )
-from PyQt5.QtGui import QPixmap, QImage, QFont
-from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap, QImage, QFont, QPainter
+from PyQt5.QtCore import Qt, pyqtSignal
 from src.leaf_classifier import classify_leaf
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 import datetime
@@ -72,6 +72,9 @@ class LeafDiseaseGUI(QWidget):
             QPushButton:pressed {
                 background-color: #3d8b40;
             }
+            QPushButton:checked {
+                background-color: #2E7D32;
+            }
             QSlider::groove:horizontal {
                 border: 1px solid #999999;
                 height: 8px;
@@ -96,6 +99,13 @@ class LeafDiseaseGUI(QWidget):
         self.current_mask = None
         self.current_clahe_img = None
         self.current_original_img = None
+        
+        # Store the current result image for editing
+        self.current_result_img = None
+        self.is_editing = False
+        self.brush_size = 5  # Size of the editing brush in pixels
+        self.edit_mode = "diseased"  # Default edit mode: "diseased" or "healthy"
+        self.edit_window = None  # Reference to the edit window
 
         main_layout = QVBoxLayout()
         main_layout.setSpacing(10)
@@ -163,6 +173,24 @@ class LeafDiseaseGUI(QWidget):
             padding: 0;
         """)
         original_info.setToolTip("The original leaf image uploaded by the user")
+        original_info.setStyleSheet("""
+            QLabel {
+                font-size: 12px;
+                color: #3498db;
+                font-weight: bold;
+                background: transparent;
+                border: none;
+                padding: 0;
+            }
+            QToolTip {
+                background-color: #ffffff;
+                color: #333333;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 12px;
+            }
+        """)
         
         header_layout.addStretch()
         header_layout.addWidget(header_label)
@@ -206,15 +234,25 @@ class LeafDiseaseGUI(QWidget):
         seg_header_label.setAlignment(Qt.AlignCenter)
         
         segmentation_info = QLabel("ⓘ")
-        segmentation_info.setStyleSheet("""
-            font-size: 12px;
-            color: #3498db;
-            font-weight: bold;
-            background: transparent;
-            border: none;
-            padding: 0;
-        """)
         segmentation_info.setToolTip("Segmentation mask showing the leaf area. Red border indicates the excluded area based on border thickness.")
+        segmentation_info.setStyleSheet("""
+            QLabel {
+                font-size: 12px;
+                color: #3498db;
+                font-weight: bold;
+                background: transparent;
+                border: none;
+                padding: 0;
+            }
+            QToolTip {
+                background-color: #ffffff;
+                color: #333333;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 12px;
+            }
+        """)
         
         seg_header_layout.addStretch()
         seg_header_layout.addWidget(seg_header_label)
@@ -258,15 +296,25 @@ class LeafDiseaseGUI(QWidget):
         clahe_header_label.setAlignment(Qt.AlignCenter)
         
         clahe_info = QLabel("ⓘ")
-        clahe_info.setStyleSheet("""
-            font-size: 12px;
-            color: #3498db;
-            font-weight: bold;
-            background: transparent;
-            border: none;
-            padding: 0;
-        """)
         clahe_info.setToolTip("Contrast Limited Adaptive Histogram Equalization applied to enhance the leaf image")
+        clahe_info.setStyleSheet("""
+            QLabel {
+                font-size: 12px;
+                color: #3498db;
+                font-weight: bold;
+                background: transparent;
+                border: none;
+                padding: 0;
+            }
+            QToolTip {
+                background-color: #ffffff;
+                color: #333333;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 12px;
+            }
+        """)
         
         clahe_header_layout.addStretch()
         clahe_header_layout.addWidget(clahe_header_label)
@@ -310,15 +358,25 @@ class LeafDiseaseGUI(QWidget):
         result_header_label.setAlignment(Qt.AlignCenter)
         
         result_info = QLabel("ⓘ")
-        result_info.setStyleSheet("""
-            font-size: 12px;
-            color: #3498db;
-            font-weight: bold;
-            background: transparent;
-            border: none;
-            padding: 0;
-        """)
         result_info.setToolTip("Final result with diseased areas highlighted in red")
+        result_info.setStyleSheet("""
+            QLabel {
+                font-size: 12px;
+                color: #3498db;
+                font-weight: bold;
+                background: transparent;
+                border: none;
+                padding: 0;
+            }
+            QToolTip {
+                background-color: #ffffff;
+                color: #333333;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 12px;
+            }
+        """)
         
         result_header_layout.addStretch()
         result_header_layout.addWidget(result_header_label)
@@ -355,6 +413,11 @@ class LeafDiseaseGUI(QWidget):
         save_btn.clicked.connect(self.save_results)
         save_btn.setIcon(self.style().standardIcon(self.style().SP_DialogSaveButton))
 
+        # Add edit mode toggle button
+        self.edit_btn = QPushButton("Edit Mode")
+        self.edit_btn.clicked.connect(self.open_edit_window)
+        self.edit_btn.setIcon(self.style().standardIcon(self.style().SP_FileDialogDetailedView))
+
         # Create slider
         slider_container = QWidget()
         slider_layout = QHBoxLayout(slider_container)
@@ -377,21 +440,31 @@ class LeafDiseaseGUI(QWidget):
         """)
         
         slider_info = QLabel("ⓘ")
-        slider_info.setStyleSheet("""
-            font-size: 12px;
-            color: #3498db;
-            font-weight: bold;
-            background: transparent;
-            border: none;
-            padding: 0;
-        """)
         slider_info.setToolTip("Adjust the border thickness to exclude pixels from the edge of the leaf. This helps avoid misclassification of leaf edges.")
+        slider_info.setStyleSheet("""
+            QLabel {
+                font-size: 12px;
+                color: #3498db;
+                font-weight: bold;
+                background: transparent;
+                border: none;
+                padding: 0;
+            }
+            QToolTip {
+                background-color: #ffffff;
+                color: #333333;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 12px;
+            }
+        """)
         
         slider_header_layout.addStretch()
         slider_header_layout.addWidget(self.slider_label)
         slider_header_layout.addWidget(slider_info)
         slider_header_layout.addStretch()
-        
+
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setMinimum(0)
         self.slider.setMaximum(20)
@@ -437,6 +510,7 @@ class LeafDiseaseGUI(QWidget):
         button_layout.addWidget(classify_btn)
         button_layout.addWidget(reset_btn)
         button_layout.addWidget(save_btn)
+        button_layout.addWidget(self.edit_btn)
         button_layout.addStretch()
 
         # Add all layouts to main layout
@@ -468,11 +542,11 @@ class LeafDiseaseGUI(QWidget):
                 vis_mask[border_vis_mask == 1] = [255, 255, 255]  # White for leaf area
                 vis_mask[border_area == 1] = [255, 0, 0]  # Red for border area
                 
-                # Display the visualization
+                # Display the visualization - use the same size as the original mask
                 h, w, ch = vis_mask.shape
                 bytes_per_line = ch * w
                 qt_vis = QImage(vis_mask.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                vis_pixmap = QPixmap.fromImage(qt_vis).scaled(250, 250, Qt.KeepAspectRatio)
+                vis_pixmap = QPixmap.fromImage(qt_vis).scaled(250, 350, Qt.KeepAspectRatio)
                 self.segmentation_label.setPixmap(vis_pixmap)
             else:
                 # If border thickness is 0, show the original mask without any red border
@@ -481,7 +555,7 @@ class LeafDiseaseGUI(QWidget):
                 h, w, ch = mask_display.shape
                 bytes_per_line = ch * w
                 qt_mask = QImage(mask_display.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                mask_pixmap = QPixmap.fromImage(qt_mask).scaled(250, 250, Qt.KeepAspectRatio)
+                mask_pixmap = QPixmap.fromImage(qt_mask).scaled(250, 350, Qt.KeepAspectRatio)
                 self.segmentation_label.setPixmap(mask_pixmap)
         
         QApplication.processEvents()
@@ -661,6 +735,13 @@ class LeafDiseaseGUI(QWidget):
             # Step 3: Apply and display CLAHE (only if not already processed)
             if self.current_clahe_img is None:
                 try:
+                    # Ensure mask dimensions match the original image
+                    if self.current_mask.shape[:2] != self.current_original_img.shape[:2]:
+                        # Resize mask to match original image dimensions
+                        self.current_mask = cv2.resize(self.current_mask, 
+                                                      (self.current_original_img.shape[1], self.current_original_img.shape[0]), 
+                                                      interpolation=cv2.INTER_NEAREST)
+                    
                     self.current_clahe_img = apply_clahe_only_on_leaf(self.current_original_img, self.current_mask)
                     cv2.imwrite("debug_clahe_input.jpg", self.current_clahe_img)
 
@@ -669,8 +750,12 @@ class LeafDiseaseGUI(QWidget):
                     h, w, ch = clahe_rgb.shape
                     bytes_per_line = ch * w
                     qt_clahe = QImage(clahe_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                    clahe_pixmap = QPixmap.fromImage(qt_clahe).scaled(250, 350, Qt.KeepAspectRatio)  # Updated height
+                    clahe_pixmap = QPixmap.fromImage(qt_clahe).scaled(250, 350, Qt.KeepAspectRatio)
+                    
+                    # Create a QLabel with the pixmap and set alignment to center
                     self.clahe_label.setPixmap(clahe_pixmap)
+                    self.clahe_label.setAlignment(Qt.AlignCenter)
+                    
                     QApplication.processEvents()
                 except Exception as e:
                     msg = QMessageBox()
@@ -742,6 +827,14 @@ class LeafDiseaseGUI(QWidget):
                 
                 QApplication.processEvents()
                 
+                # Ensure mask dimensions match the original image for classification
+                if self.current_mask.shape[:2] != self.current_original_img.shape[:2]:
+                    # Resize mask to match original image dimensions
+                    self.current_mask = cv2.resize(self.current_mask, 
+                                                  (self.current_original_img.shape[1], self.current_original_img.shape[0]), 
+                                                  interpolation=cv2.INTER_NEAREST)
+                
+                # Run classification with the original mask and CLAHE image
                 overlay_img, percent = classify_leaf(
                     self.image_path,
                     mask=self.current_mask,
@@ -749,14 +842,20 @@ class LeafDiseaseGUI(QWidget):
                     processed_img=self.current_clahe_img
                 )
 
+                # Store the result image for editing
+                self.current_result_img = overlay_img.copy()
+
                 # Display final result
-                rgb_image = cv2.cvtColor(overlay_img, cv2.COLOR_BGR2RGB)
+                rgb_image = cv2.cvtColor(self.current_result_img, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgb_image.shape
                 bytes_per_line = ch * w
                 qt_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                result_pixmap = QPixmap.fromImage(qt_img).scaled(250, 350, Qt.KeepAspectRatio)  # Updated height
+                result_pixmap = QPixmap.fromImage(qt_img).scaled(250, 350, Qt.KeepAspectRatio)
+
+                # Create a QLabel with the pixmap and set alignment to center
                 self.result_label.setPixmap(result_pixmap)
-                
+                self.result_label.setAlignment(Qt.AlignCenter)
+
                 # Update percentage display
                 self.percentage_label.setText(f"Disease Percentage: {percent:.2f}%")
                 QApplication.processEvents()
@@ -791,7 +890,6 @@ class LeafDiseaseGUI(QWidget):
                     }
                 """)
                 msg.exec_()
-                return
 
         except Exception as e:
             msg = QMessageBox()
@@ -824,6 +922,66 @@ class LeafDiseaseGUI(QWidget):
                 }
             """)
             msg.exec_()
+
+    def find_leaf_bounding_box(self, mask):
+        """Find the bounding box of the leaf in the mask"""
+        # Find the coordinates of the leaf pixels
+        y_indices, x_indices = np.where(mask == 1)
+        
+        if len(y_indices) == 0 or len(x_indices) == 0:
+            # If no leaf pixels found, return the full image bounds
+            return (0, 0, mask.shape[1], mask.shape[0])
+        
+        # Get the bounding box coordinates
+        min_y, max_y = np.min(y_indices), np.max(y_indices)
+        min_x, max_x = np.min(x_indices), np.max(x_indices)
+        
+        # Add padding around the leaf (10% of the width/height)
+        height, width = mask.shape
+        pad_y = int(0.1 * (max_y - min_y))
+        pad_x = int(0.1 * (max_x - min_x))
+        
+        # Ensure the padding doesn't exceed image boundaries
+        min_y = max(0, min_y - pad_y)
+        max_y = min(height, max_y + pad_y)
+        min_x = max(0, min_x - pad_x)
+        max_x = min(width, max_x + pad_x)
+        
+        return (min_x, min_y, max_x, max_y)
+        
+    def focus_on_leaf(self, pixmap, bbox):
+        """Adjust the pixmap to focus on the leaf"""
+        # Get the original image dimensions
+        img_width = pixmap.width()
+        img_height = pixmap.height()
+        
+        # Get the bounding box coordinates
+        min_x, min_y, max_x, max_y = bbox
+        
+        # Calculate the center of the leaf
+        leaf_center_x = (min_x + max_x) / 2
+        leaf_center_y = (min_y + max_y) / 2
+        
+        # Calculate the center of the image
+        img_center_x = img_width / 2
+        img_center_y = img_height / 2
+        
+        # Calculate the offset to center the leaf
+        offset_x = leaf_center_x - img_center_x
+        offset_y = leaf_center_y - img_center_y
+        
+        # Create a new pixmap with the same size
+        focused_pixmap = QPixmap(pixmap.size())
+        focused_pixmap.fill(Qt.transparent)
+        
+        # Create a painter to draw the pixmap
+        painter = QPainter(focused_pixmap)
+        
+        # Draw the original pixmap with the offset
+        painter.drawPixmap(offset_x, offset_y, pixmap)
+        painter.end()
+        
+        return focused_pixmap
 
     def reset_analysis(self):
         """Reset the analysis to default settings"""
@@ -935,8 +1093,442 @@ class LeafDiseaseGUI(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save results: {str(e)}")
 
+    def open_edit_window(self):
+        """Open a large window for editing the result image"""
+        if self.current_result_img is None or self.current_mask is None:
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Warning)
+            msg.setText("Please run the analysis first before editing.")
+            msg.setWindowTitle("Warning")
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: #f0f0f0;
+                }
+                QLabel {
+                    background: transparent;
+                    border: none;
+                    padding: 0;
+                    color: #2c3e50;
+                }
+                QPushButton {
+                    background-color: #4CAF50;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    font-size: 14px;
+                }
+                QPushButton:hover {
+                    background-color: #45a049;
+                }
+                QPushButton:pressed {
+                    background-color: #3d8b40;
+                }
+            """)
+            msg.exec_()
+            return
+            
+        # Create a new window for editing
+        self.edit_window = EditWindow(self.current_result_img.copy(), self.current_mask, self.current_clahe_img, self)
+        self.edit_window.result_updated.connect(self.update_result_from_edit)
+        self.edit_window.show()
+
+    def update_result_from_edit(self, edited_img, percent):
+        """Update the main window with the edited result"""
+        self.current_result_img = edited_img
+        
+        # Update the display
+        rgb_image = cv2.cvtColor(self.current_result_img, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_image.shape
+        bytes_per_line = ch * w
+        qt_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        result_pixmap = QPixmap.fromImage(qt_img).scaled(250, 350, Qt.KeepAspectRatio)
+        self.result_label.setPixmap(result_pixmap)
+        
+        # Update the disease percentage
+        self.percentage_label.setText(f"Disease Percentage: {percent:.2f}%")
+
+class EditWindow(QWidget):
+    """A separate window for editing the result image"""
+    result_updated = pyqtSignal(np.ndarray, float)  # Signal to send edited image and percentage back to main window
+    
+    def __init__(self, result_img, mask, clahe_img, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Result")
+        self.resize(1000, 800)
+        
+        self.result_img = result_img
+        self.mask = mask
+        self.clahe_img = clahe_img
+        self.original_img = parent.current_original_img.copy()  # Store the original image
+        self.brush_size = 5
+        self.edit_mode = "diseased"  # Default edit mode: "diseased" or "healthy"
+        self.view_mode = "original"  # Default view mode: "original" or "enhanced"
+        
+        # Initialize history with the original state
+        self.history = [result_img.copy()]  # Store history of changes for undo
+        self.current_step = 0  # Current position in history
+        
+        # Track the current brush stroke
+        self.is_drawing = False
+        
+        # Create layout
+        layout = QVBoxLayout()
+        
+        # Create view mode selection at the top
+        view_mode_layout = QHBoxLayout()
+        view_mode_label = QLabel("View Mode:")
+        self.original_view_btn = QPushButton("Original Leaf")
+        self.original_view_btn.setCheckable(True)
+        self.original_view_btn.setChecked(True)
+        self.original_view_btn.clicked.connect(lambda: self.set_view_mode("original"))
+        
+        self.enhanced_view_btn = QPushButton("Enhanced Leaf")
+        self.enhanced_view_btn.setCheckable(True)
+        self.enhanced_view_btn.clicked.connect(lambda: self.set_view_mode("enhanced"))
+        
+        view_mode_layout.addWidget(view_mode_label)
+        view_mode_layout.addWidget(self.original_view_btn)
+        view_mode_layout.addWidget(self.enhanced_view_btn)
+        view_mode_layout.addStretch()
+        
+        # Create image label
+        self.image_label = QLabel()
+        self.image_label.setMinimumSize(800, 600)
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setStyleSheet("""
+            background-color: white;
+            border: 1px solid #cccccc;
+            border-radius: 5px;
+        """)
+        
+        # Update the display
+        self.update_display()
+        
+        # Create controls
+        controls_layout = QHBoxLayout()
+        
+        # Mode selection buttons
+        self.diseased_btn = QPushButton("Mark as Diseased")
+        self.diseased_btn.setCheckable(True)
+        self.diseased_btn.setChecked(True)
+        self.diseased_btn.clicked.connect(lambda: self.set_edit_mode("diseased"))
+        self.diseased_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #d32f2f;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #b71c1c;
+            }
+            QPushButton:pressed {
+                background-color: #7f0000;
+            }
+            QPushButton:checked {
+                background-color: #d32f2f;
+                border: 2px solid #ffffff;
+            }
+        """)
+        
+        self.healthy_btn = QPushButton("Mark as Healthy")
+        self.healthy_btn.setCheckable(True)
+        self.healthy_btn.clicked.connect(lambda: self.set_edit_mode("healthy"))
+        self.healthy_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+            QPushButton:checked {
+                background-color: #4CAF50;
+                border: 2px solid #ffffff;
+            }
+        """)
+        
+        # Brush size slider
+        brush_label = QLabel("Brush Size:")
+        self.brush_slider = QSlider(Qt.Horizontal)
+        self.brush_slider.setMinimum(1)
+        self.brush_slider.setMaximum(20)
+        self.brush_slider.setValue(5)
+        self.brush_slider.valueChanged.connect(self.update_brush_size)
+        
+        # Undo and Redo buttons
+        self.undo_btn = QPushButton("Undo")
+        self.undo_btn.clicked.connect(self.undo_changes)
+        self.undo_btn.setEnabled(False)  # Initially disabled
+        
+        self.redo_btn = QPushButton("Redo")
+        self.redo_btn.clicked.connect(self.redo_changes)
+        self.redo_btn.setEnabled(False)  # Initially disabled
+        
+        # Apply and Cancel buttons
+        apply_btn = QPushButton("Apply Changes")
+        apply_btn.clicked.connect(self.apply_changes)
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.cancel_changes)
+        
+        # Add widgets to controls layout
+        controls_layout.addWidget(self.diseased_btn)
+        controls_layout.addWidget(self.healthy_btn)
+        controls_layout.addWidget(brush_label)
+        controls_layout.addWidget(self.brush_slider)
+        controls_layout.addWidget(self.undo_btn)
+        controls_layout.addWidget(self.redo_btn)
+        controls_layout.addWidget(apply_btn)
+        controls_layout.addWidget(cancel_btn)
+        
+        # Add layouts to main layout
+        layout.addLayout(view_mode_layout)
+        layout.addWidget(self.image_label)
+        layout.addLayout(controls_layout)
+        
+        self.setLayout(layout)
+        
+        # Enable mouse tracking
+        self.image_label.mousePressEvent = self.image_label_mouse_press
+        self.image_label.mouseMoveEvent = self.image_label_mouse_move
+        self.image_label.mouseReleaseEvent = self.image_label_mouse_release
+        self.image_label.setCursor(Qt.CrossCursor)
+    
+    def set_view_mode(self, mode):
+        """Set the view mode (original or enhanced)"""
+        self.view_mode = mode
+        if mode == "original":
+            self.original_view_btn.setChecked(True)
+            self.enhanced_view_btn.setChecked(False)
+        else:
+            self.original_view_btn.setChecked(False)
+            self.enhanced_view_btn.setChecked(True)
+        
+        # Update the display
+        self.update_display()
+    
+    def set_edit_mode(self, mode):
+        """Set the edit mode (diseased or healthy)"""
+        self.edit_mode = mode
+        if mode == "diseased":
+            self.diseased_btn.setChecked(True)
+            self.healthy_btn.setChecked(False)
+        else:
+            self.diseased_btn.setChecked(False)
+            self.healthy_btn.setChecked(True)
+    
+    def update_brush_size(self, value):
+        """Update the brush size"""
+        self.brush_size = value
+    
+    def update_display(self):
+        """Update the image display"""
+        # Create a copy of the result image for display
+        display_img = self.result_img.copy()
+        
+        # If in original view mode, replace non-diseased areas with original image
+        if self.view_mode == "original":
+            # Find pixels that are not marked as diseased (not red)
+            non_diseased = ~np.all(display_img == [0, 0, 255], axis=2)
+            # Replace those pixels with the original image
+            display_img[non_diseased] = self.original_img[non_diseased]
+        else:  # enhanced view mode
+            # Find pixels that are not marked as diseased (not red)
+            non_diseased = ~np.all(display_img == [0, 0, 255], axis=2)
+            # Replace those pixels with the CLAHE image
+            display_img[non_diseased] = self.clahe_img[non_diseased]
+        
+        # Convert to RGB for display
+        rgb_image = cv2.cvtColor(display_img, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_image.shape
+        bytes_per_line = ch * w
+        qt_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(qt_img).scaled(800, 600, Qt.KeepAspectRatio)
+        self.image_label.setPixmap(pixmap)
+    
+    def image_label_mouse_press(self, event):
+        """Handle mouse press events"""
+        if self.result_img is None or self.mask is None:
+            return
+        
+        # Get the position in the image
+        pos = event.pos()
+        label_size = self.image_label.size()
+        pixmap = self.image_label.pixmap()
+        if pixmap:
+            # Calculate the scaling factor and offset
+            pixmap_size = pixmap.size()
+            scale_x = self.result_img.shape[1] / pixmap_size.width()
+            scale_y = self.result_img.shape[0] / pixmap_size.height()
+            
+            # Calculate the offset to center the image
+            offset_x = (label_size.width() - pixmap_size.width()) / 2
+            offset_y = (label_size.height() - pixmap_size.height()) / 2
+            
+            # Convert position to image coordinates, accounting for offset
+            x = int((pos.x() - offset_x) * scale_x)
+            y = int((pos.y() - offset_y) * scale_y)
+            
+            # Ensure coordinates are within bounds
+            x = max(0, min(x, self.result_img.shape[1] - 1))
+            y = max(0, min(y, self.result_img.shape[0] - 1))
+            
+            # Start a new brush stroke
+            self.is_drawing = True
+            
+            # Apply the edit
+            self.edit_image(x, y)
+    
+    def image_label_mouse_move(self, event):
+        """Handle mouse move events"""
+        if self.result_img is None or self.mask is None or not self.is_drawing:
+            return
+        
+        # Get the position in the image
+        pos = event.pos()
+        label_size = self.image_label.size()
+        pixmap = self.image_label.pixmap()
+        if pixmap:
+            # Calculate the scaling factor and offset
+            pixmap_size = pixmap.size()
+            scale_x = self.result_img.shape[1] / pixmap_size.width()
+            scale_y = self.result_img.shape[0] / pixmap_size.height()
+            
+            # Calculate the offset to center the image
+            offset_x = (label_size.width() - pixmap_size.width()) / 2
+            offset_y = (label_size.height() - pixmap_size.height()) / 2
+            
+            # Convert position to image coordinates, accounting for offset
+            x = int((pos.x() - offset_x) * scale_x)
+            y = int((pos.y() - offset_y) * scale_y)
+            
+            # Ensure coordinates are within bounds
+            x = max(0, min(x, self.result_img.shape[1] - 1))
+            y = max(0, min(y, self.result_img.shape[0] - 1))
+            
+            # Apply the edit if left button is pressed
+            if event.buttons() & Qt.LeftButton:
+                self.edit_image(x, y)
+    
+    def image_label_mouse_release(self, event):
+        """Handle mouse release events"""
+        if self.is_drawing:
+            # End the current brush stroke and save it to history
+            self.is_drawing = False
+            
+            # Store the current state before making changes
+            if len(self.history) > self.current_step + 1:
+                # If we've undone some changes, remove the future history
+                self.history = self.history[:self.current_step + 1]
+            
+            # Save the current state
+            self.history.append(self.result_img.copy())
+            self.current_step += 1
+            
+            # Update button states
+            self.update_undo_redo_buttons()
+    
+    def update_undo_redo_buttons(self):
+        """Update the enabled state of undo and redo buttons"""
+        # Enable undo button if we have history to undo
+        self.undo_btn.setEnabled(self.current_step > 0)
+        
+        # Enable redo button if we have history to redo
+        self.redo_btn.setEnabled(self.current_step < len(self.history) - 1)
+    
+    def edit_image(self, x, y):
+        """Edit the image at the given coordinates"""
+        if self.result_img is None or self.mask is None:
+            return
+            
+        # Only allow editing within the leaf mask
+        if self.mask[y, x] == 0:
+            return
+            
+        # Create a circular brush
+        y_indices, x_indices = np.ogrid[-self.brush_size:self.brush_size+1, -self.brush_size:self.brush_size+1]
+        mask = x_indices*x_indices + y_indices*y_indices <= self.brush_size*self.brush_size
+        
+        # Apply the brush
+        for dy in range(-self.brush_size, self.brush_size+1):
+            for dx in range(-self.brush_size, self.brush_size+1):
+                if mask[dy+self.brush_size, dx+self.brush_size]:
+                    ny, nx = y + dy, x + dx
+                    if (0 <= ny < self.result_img.shape[0] and 
+                        0 <= nx < self.result_img.shape[1] and 
+                        self.mask[ny, nx] == 1):
+                        if self.edit_mode == "diseased":
+                            self.result_img[ny, nx] = [0, 0, 255]  # Red for diseased
+                        else:
+                            # Restore original color from original image
+                            self.result_img[ny, nx] = self.original_img[ny, nx]
+        
+        # Update the display
+        self.update_display()
+    
+    def undo_changes(self):
+        """Undo the last change"""
+        if self.current_step > 0:
+            self.current_step -= 1
+            self.result_img = self.history[self.current_step].copy()
+            self.update_display()
+            self.update_undo_redo_buttons()
+    
+    def redo_changes(self):
+        """Redo the last undone change"""
+        if self.current_step < len(self.history) - 1:
+            self.current_step += 1
+            self.result_img = self.history[self.current_step].copy()
+            self.update_display()
+            self.update_undo_redo_buttons()
+    
+    def cancel_changes(self):
+        """Cancel all changes and close the window"""
+        self.close()
+    
+    def apply_changes(self):
+        """Apply changes and send the result back to the main window"""
+        # Calculate the disease percentage
+        red_pixels = np.all(self.result_img == [0, 0, 255], axis=2)
+        total_leaf_pixels = np.sum(self.mask == 1)
+        
+        if total_leaf_pixels > 0:
+            percent = (np.sum(red_pixels & (self.mask == 1)) / total_leaf_pixels) * 100
+        else:
+            percent = 0.0
+            
+        # Send the result back to the main window
+        self.result_updated.emit(self.result_img, percent)
+        
+        # Close the edit window
+        self.close()
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    
+    # Set custom tooltip style
+    app.setStyleSheet("""
+        QToolTip {
+            background-color: #ffffff;
+            color: #333333;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            padding: 5px;
+            font-size: 12px;
+        }
+    """)
+    
     gui = LeafDiseaseGUI()
     gui.show()
     sys.exit(app.exec_())

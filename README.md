@@ -76,8 +76,8 @@ The system provides a user-friendly interface for leaf disease detection with in
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/Melon-Leaf-Detector.git
-   cd Melon-Leaf-Detector
+   git clone https://github.com/shahafgev/BFB-Leaf-Detector.git
+   cd BFB-Leaf-Detector
    ```
 
 2. Install dependencies:

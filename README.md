@@ -149,6 +149,8 @@ The system uses a dataset of melon leaf images with the following features:
 - RGB color channels
 - HSV color space conversion
 - Balanced training data to handle class imbalance
+- Manually labeled pixel data created by annotating pixels in CLAHE-processed leaf images
+- The dataset was created by carefully labeling healthy and diseased regions in the training images
 
 ## Model Performance
 
